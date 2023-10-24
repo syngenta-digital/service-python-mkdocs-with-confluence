@@ -32,6 +32,15 @@ class DummyFile(object):
         pass
 
 
+class BearerAuth(requests.auth.AuthBase):
+    def __init__(self, token):
+        self.token = token
+
+    def __call__(self, r):
+        r.headers["authorization"] = "Bearer " + self.token
+        return r
+
+
 class MkdocsWithConfluence(BasePlugin):
     _id = 0
     config_scheme = (
@@ -40,6 +49,7 @@ class MkdocsWithConfluence(BasePlugin):
         ("parent_page_name", config_options.Type(str, default=None)),
         ("username", config_options.Type(str, default=environ.get("JIRA_USERNAME", None))),
         ("password", config_options.Type(str, default=environ.get("JIRA_PASSWORD", None))),
+        ("token", config_options.Type(str, default=environ.get("JIRA_TOKEN", None))),
         ("enabled_if_env", config_options.Type(str, default=None)),
         ("verbose", config_options.Type(bool, default=False)),
         ("debug", config_options.Type(bool, default=False)),
@@ -146,7 +156,11 @@ class MkdocsWithConfluence(BasePlugin):
 
     def on_page_markdown(self, markdown, page, config, files):
         MkdocsWithConfluence._id += 1
-        self.session.auth = (self.config["username"], self.config["password"])
+        self.session.auth = (
+            (self.config["username"], self.config["password"])
+            if "token" not in self.config else
+            BearerAuth(self.config["token"])
+        )
 
         if self.enabled:
             if self.simple_log is True:
