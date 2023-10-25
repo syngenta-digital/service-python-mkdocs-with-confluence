@@ -28,6 +28,7 @@ MERMAID_TEMPLATE = """
 """
 MERMAID_FORMAT = "000MERMAID_CODE000{file}000"
 
+
 @contextlib.contextmanager
 def nostdout():
     save_stdout = sys.stdout
@@ -179,7 +180,6 @@ class MkdocsWithConfluence(BasePlugin):
             self.enabled
             and str(page.meta.get("mkdocs_with_confluence_skip")).lower() != "true"
         ):
-
             log.info(f"Page export progress: {MkdocsWithConfluence._id} / {self.flen}")
 
             log.debug(
@@ -283,11 +283,11 @@ class MkdocsWithConfluence(BasePlugin):
                 except AttributeError as e:
                     log.debug(f"WARN(({e}): No images found in markdown. Proceed..")
 
-                confluence_body_swaps = {}
+                confluence_body_swaps = []
                 try:
                     log.debug(f"Processing mermaid code blocks")
 
-                    mermaid_re = r"```mermaid\n([\S\s^`]*)```"
+                    mermaid_re = r"```mermaid\n(\n|.)*?```"
                     for match in re.finditer(mermaid_re, new_markdown):
                         mermaid_code = match.group(1)
 
@@ -302,7 +302,16 @@ class MkdocsWithConfluence(BasePlugin):
 
                             swap_id = MERMAID_FORMAT.format(file=attachment_name)
 
-                            confluence_body_swaps[swap_id] = self.convert_page(MERMAID_TEMPLATE.replace("FILE", attachment_name))
+                            confluence_body_swaps.append(
+                                (
+                                    swap_id,
+                                    self.convert_page(
+                                        MERMAID_TEMPLATE.replace(
+                                            "FILE", attachment_name
+                                        )
+                                    ),
+                                )
+                            )
 
                             new_markdown = re.sub(mermaid_re, swap_id, new_markdown)
 
@@ -312,7 +321,7 @@ class MkdocsWithConfluence(BasePlugin):
 
                 confluence_body = self.confluence_mistune(new_markdown)
 
-                for k,v in confluence_body_swaps.items():
+                for k, v in confluence_body_swaps:
                     confluence_body = confluence_body.replace(k, v)
 
                 log.debug(confluence_body)
@@ -501,7 +510,9 @@ class MkdocsWithConfluence(BasePlugin):
             f"Mkdocs With Confluence * {page_name} *Add/Update ATTACHMENT if required* {attachment_name}"
         )
 
-        log.debug(f" * Add Attachment: PAGE NAME={page_name}, NAME={attachment_name},FILE: {attachment_path}")
+        log.debug(
+            f" * Add Attachment: PAGE NAME={page_name}, NAME={attachment_name},FILE: {attachment_path}"
+        )
 
         page_id = self.find_page_id(page_name)
         if page_id:
@@ -519,10 +530,16 @@ class MkdocsWithConfluence(BasePlugin):
                     )
                 else:
                     self.update_attachment(
-                        page_id, attachment_name, attachment_path, existing_attachment, attachment_message
+                        page_id,
+                        attachment_name,
+                        attachment_path,
+                        existing_attachment,
+                        attachment_message,
                     )
             else:
-                self.create_attachment(page_id, attachment_name, attachment_path, attachment_message)
+                self.create_attachment(
+                    page_id, attachment_name, attachment_path, attachment_message
+                )
         else:
             log.debug("PAGE DOES NOT EXISTS")
 
@@ -531,7 +548,12 @@ class MkdocsWithConfluence(BasePlugin):
 
         log.debug(f" * Get Attachment: PAGE ID={page_id}, FILE={attachment_name}")
 
-        url = CONTENT_URL_FORMAT.format(base_url=self.config["host_url"]) + "/" + page_id + "/child/attachment"
+        url = (
+            CONTENT_URL_FORMAT.format(base_url=self.config["host_url"])
+            + "/"
+            + page_id
+            + "/child/attachment"
+        )
         headers = {"X-Atlassian-Token": "no-check"}  # no content-type here!
 
         log.debug(f"URL: {url}")
@@ -545,8 +567,12 @@ class MkdocsWithConfluence(BasePlugin):
         if response_json["size"]:
             return response_json["results"][0]
 
-    def update_attachment(self, page_id, attachment_name, attachment_path, existing_attachment, message):
-        log.debug(f" * Update Attachment: PAGE ID={page_id}, NAME={attachment_name}, FILE={attachment_path}")
+    def update_attachment(
+        self, page_id, attachment_name, attachment_path, existing_attachment, message
+    ):
+        log.debug(
+            f" * Update Attachment: PAGE ID={page_id}, NAME={attachment_name}, FILE={attachment_path}"
+        )
 
         url = (
             CONTENT_URL_FORMAT.format(base_url=self.config["host_url"])
@@ -581,9 +607,16 @@ class MkdocsWithConfluence(BasePlugin):
                 log.debug("ERR!")
 
     def create_attachment(self, page_id, attachment_name, attachment_path, message):
-        log.debug(f" * Create Attachment: PAGE ID={page_id}, NAME={attachment_name}, FILE={attachment_path}")
+        log.debug(
+            f" * Create Attachment: PAGE ID={page_id}, NAME={attachment_name}, FILE={attachment_path}"
+        )
 
-        url = CONTENT_URL_FORMAT.format(base_url=self.config["host_url"]) + "/" + page_id + "/child/attachment"
+        url = (
+            CONTENT_URL_FORMAT.format(base_url=self.config["host_url"])
+            + "/"
+            + page_id
+            + "/child/attachment"
+        )
         headers = {"X-Atlassian-Token": "no-check"}  # no content-type here!
 
         log.debug(f"URL: {url}")
@@ -679,7 +712,11 @@ class MkdocsWithConfluence(BasePlugin):
         if page_id:
             page_version = self.find_page_version(page_name)
             page_version = page_version + 1
-            url = CONTENT_URL_FORMAT.format(base_url=self.config["host_url"]) + "/" + page_id
+            url = (
+                CONTENT_URL_FORMAT.format(base_url=self.config["host_url"])
+                + "/"
+                + page_id
+            )
 
             log.debug(f"URL: {url}")
 
@@ -740,7 +777,12 @@ class MkdocsWithConfluence(BasePlugin):
         log.debug(f" * Find Parent of page with name={page_name}")
 
         idp = self.find_page_id(page_name)
-        url = CONTENT_URL_FORMAT.format(base_url=self.config["host_url"]) + "/" + idp + "?expand=ancestors"
+        url = (
+            CONTENT_URL_FORMAT.format(base_url=self.config["host_url"])
+            + "/"
+            + idp
+            + "?expand=ancestors"
+        )
 
         r = self.session.get(url)
         r.raise_for_status()
@@ -759,17 +801,13 @@ class MkdocsWithConfluence(BasePlugin):
         log.debug(f"Converting page from {from_type} to {to_type}")
 
         try:
-            url = CONVERT_URL_FORMAT.format(base_url=self.config["host_url"], to=to_type)
+            url = CONVERT_URL_FORMAT.format(
+                base_url=self.config["host_url"], to=to_type
+            )
 
-            headers = {
-                "Accept": "application/json",
-                "Content-Type": "application/json"
-            }
+            headers = {"Accept": "application/json", "Content-Type": "application/json"}
 
-            data = {
-                "value": body,
-                "representation": from_type
-            }
+            data = {"value": body, "representation": from_type}
 
             r = self.session.post(url, json=data, headers=headers)
             r.raise_for_status()
