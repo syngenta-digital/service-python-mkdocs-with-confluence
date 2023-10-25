@@ -36,22 +36,22 @@ Use following config and adjust it according to your needs:
         host_url: https://<YOUR_CONFLUENCE_DOMAIN>/rest/api/content
         space: <YOUR_SPACE>
         parent_page_name: <YOUR_ROOT_PARENT_PAGE>
-        ############################
-        # AUTH
-        ############################
-        # Use User / Password
         username: <YOUR_USERNAME_TO_CONFLUENCE>
         password: <YOUR_PASSWORD_TO_CONFLUENCE>
-        # Use Token
-        token: <YOUR_TOKEN_TO_CONFLUENCE>
-        ############################
         enabled_if_env: MKDOCS_TO_CONFLUENCE
-        #verbose: true
-        #debug: true
         dryrun: true
 ```
 
-## Parameters
+## Customization
+
+- **Skip document upload**: if it possible to skip a document if we provide the "mkdocs_with_confluence_skip" metadata in the header of the document:
+
+    ```
+    ---
+    mkdocs_with_confluence_skip: true
+    ---
+    # Some document
+    ```
 
 ### Requirements
 
