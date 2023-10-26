@@ -70,18 +70,20 @@ class MkdocsWithConfluence(BasePlugin):
         ("debug", config_options.Type(bool, default=False)),
         ("dryrun", config_options.Type(bool, default=False)),
         ("sleep_time", config_options.Type(float, default=5.0)),
+        ("timeout", config_options.Type(float, default=30.0)),
     )
 
     def __init__(self):
         self.enabled = True
         self.confluence_renderer = ConfluenceRenderer(use_xhtml=True)
-        self.confluence_mistune = mistune.Markdown(renderer=self.confluence_renderer)
+        self.confluence_mistune = mistune.Markdown(
+            renderer=self.confluence_renderer
+        )
         self.flen = 1
         self.session = requests.Session()
         self.page_attachments = {}
 
     def on_nav(self, nav, config, files):
-        MkdocsWithConfluence.tab_nav = []
         navigation_items = nav.__repr__()
 
         for n in navigation_items.split("\n"):
@@ -103,7 +105,7 @@ class MkdocsWithConfluence(BasePlugin):
                     self.page_title = self.page_local_name
 
                 p = spaces + self.page_title
-                MkdocsWithConfluence.tab_nav.append(p)
+
             if "Section" in n:
                 try:
                     self.section_title = self.__get_section_title(n)
@@ -119,7 +121,6 @@ class MkdocsWithConfluence(BasePlugin):
                     self.section_local_name = self.__get_section_title(n)
                     self.section_title = self.section_local_name
                 s = spaces + self.section_title
-                MkdocsWithConfluence.tab_nav.append(s)
 
     def on_files(self, files, config):
         pages = files.documentation_pages()
@@ -152,6 +153,7 @@ class MkdocsWithConfluence(BasePlugin):
                         f"turned ON by var {env_name}==1!"
                     )
                     self.enabled = True
+                    self.session.auth = (self.config["username"], self.config["password"])
             else:
                 log.warning(
                     "Exporting Mkdocs pages to Confluence turned OFF: "
@@ -172,14 +174,13 @@ class MkdocsWithConfluence(BasePlugin):
                 self._dryrun = False
         return self._dryrun
 
+    def is_enabled_page(self, page):
+        return str(page.meta.get("mkdocs_with_confluence_skip")).lower() != "true"
+
     def on_page_markdown(self, markdown, page, config, files):
         MkdocsWithConfluence._id += 1
-        self.session.auth = (self.config["username"], self.config["password"])
 
-        if (
-            self.enabled
-            and str(page.meta.get("mkdocs_with_confluence_skip")).lower() != "true"
-        ):
+        if self.enabled and self.is_enabled_page(page):
             log.info(f"Page export progress: {MkdocsWithConfluence._id} / {self.flen}")
 
             log.debug(
@@ -203,8 +204,6 @@ class MkdocsWithConfluence(BasePlugin):
 
                     parent = None
 
-                log.debug(f"{parent}")
-
                 if not parent:
                     parent = self.config["parent_page_name"]
 
@@ -224,8 +223,6 @@ class MkdocsWithConfluence(BasePlugin):
                     )
 
                     parent1 = None
-
-                log.debug(f"{parent}")
 
                 if not parent1:
                     parent1 = main_parent
@@ -287,11 +284,15 @@ class MkdocsWithConfluence(BasePlugin):
                 try:
                     log.debug(f"Processing mermaid code blocks")
 
-                    mermaid_re = r"```mermaid\n(\n|.)*?```"
+                    mermaid_re = r"```mermaid\n([^`]+)\n```"
+                    
+                    mermaid_counter = 1
+                    
                     for match in re.finditer(mermaid_re, new_markdown):
                         mermaid_code = match.group(1)
 
-                        attachment_name = f"mermaid-{uuid.uuid4().hex}.txt"
+                        title_id = hash(page.title)
+                        attachment_name = f"mermaid-{title_id}-{mermaid_counter}.txt"
                         attachment_path = attachment_name
                         attachment_file = f"{site_dir}/{attachment_name}"
 
@@ -315,7 +316,9 @@ class MkdocsWithConfluence(BasePlugin):
 
                             new_markdown = re.sub(mermaid_re, swap_id, new_markdown)
 
-                            log.debug(f"Found mermaid code: {file_path}")
+                            log.debug(f"Found mermaid code #{mermaid_counter}")
+                            
+                            mermaid_counter += 1
                 except Exception as e:
                     log.debug(f"WARN(({e}): Error processing mermaid. Proceed..")
 
@@ -349,21 +352,22 @@ class MkdocsWithConfluence(BasePlugin):
                             f"ERR: Parents does not match: '{parent}' =/= '{parent_name}' Aborting..."
                         )
                         return markdown
+
                     self.update_page(page.title, confluence_body)
-                    for i in MkdocsWithConfluence.tab_nav:
-                        if page.title in i:
-                            log.info(f"{i} *UPDATE*")
                 else:
                     log.debug(
                         f"Page={page.title}, parent0={parent}, "
                         f"parent1={parent1}, main parent={main_parent}"
                     )
 
-                    parent_id = self.find_page_id(parent)
-                    self.wait_until(parent_id, 1, 20)
-                    second_parent_id = self.find_page_id(parent1)
-                    self.wait_until(second_parent_id, 1, 20)
                     main_parent_id = self.find_page_id(main_parent)
+
+                    find_parent_id = lambda: self.find_page_id(parent)
+                    find_second_parent_id = lambda: self.find_page_id(parent1)
+
+                    parent_id = self.wait_until(find_parent_id)
+                    second_parent_id = self.wait_until(find_second_parent_id)
+
                     if not parent_id:
                         if not second_parent_id:
                             main_parent_id = self.find_page_id(main_parent)
@@ -377,11 +381,11 @@ class MkdocsWithConfluence(BasePlugin):
                             )
 
                             body = PARENT_TEMPLATE.replace("TEMPLATE", parent1)
-                            self.add_page(parent1, main_parent_id, body, format="wiki")
-                            for i in MkdocsWithConfluence.tab_nav:
-                                if parent1 in i:
-                                    log.info(f"{i} *NEW PAGE*")
-                            time.sleep(1)
+
+                            self.add_page(parent1, main_parent_id, body,
+                                          format="wiki")
+
+                            second_parent_id = self.wait_until(find_second_parent_id)
 
                         log.debug(
                             f"Trying to Add page '{parent}' "
@@ -390,59 +394,22 @@ class MkdocsWithConfluence(BasePlugin):
 
                         body = PARENT_TEMPLATE.replace("TEMPLATE", parent)
 
-                        for i in range(11):
-                            while parent_id is None:
-                                try:
-                                    self.add_page(
-                                        parent, second_parent_id, body, format="wiki"
-                                    )
+                        self.add_page(parent, second_parent_id, body,
+                                      format="wiki")
 
-                                    break
-                                except requests.exceptions.HTTPError:
-                                    log.debug(
-                                        f"HTTP error on adding parent page. It probably occured due to "
-                                        f"parent ID('{second_parent_id}') page is not YET synced on server. Retry nb {i}/10..."
-                                    )
+                        parent_id = self.wait_until(find_parent_id)
 
-                                    time.sleep(self.config["sleep_time"])
-                                break
-
-                        for i in MkdocsWithConfluence.tab_nav:
-                            if parent in i:
-                                log.info(f"{i} *NEW PAGE*")
-                        time.sleep(1)
-
-                    if parent_id is None:
-                        for i in range(11):
-                            while parent_id is None:
-                                try:
-                                    self.add_page(
-                                        page.title, parent_id, confluence_body
-                                    )
-                                except requests.exceptions.HTTPError:
-                                    log.debug(
-                                        f"HTTP error on adding page. It probably occured due to "
-                                        f"parent ID('{parent_id}') page is not YET synced on server. Retry nb {i}/10..."
-                                    )
-
-                                    time.sleep(self.config["sleep_time"])
-                                    parent_id = self.find_page_id(parent)
-                                break
-                    else:
-                        self.add_page(page.title, parent_id, confluence_body)
+                    self.add_page(page.title, parent_id, confluence_body)
 
                     log.info(
                         f"Trying to Add page '{page.title}' to parent0({parent}) ID: {parent_id}"
                     )
-                    for i in MkdocsWithConfluence.tab_nav:
-                        if page.title in i:
-                            log.info(f"{i} *NEW PAGE*")
 
                 if attachments:
                     self.page_attachments[page.title] = attachments
 
-            except IndexError as e:
-                log.debug(f"ERR({e}): Exception error!")
+            except Exception:
+                log.exception(f"Error in on_page_markdown in page '{page.title}'")
 
                 return markdown
 
@@ -702,7 +669,7 @@ class MkdocsWithConfluence(BasePlugin):
             else:
                 log.debug("ERR!")
 
-            time.sleep(self.config["sleep_time"])
+            self.wait()
 
     def update_page(self, page_name, page_content, format="storage"):
         page_id = self.find_page_id(page_name)
@@ -744,7 +711,7 @@ class MkdocsWithConfluence(BasePlugin):
                 else:
                     log.debug("ERR!")
 
-                time.sleep(self.config["sleep_time"])
+                self.wait()
         else:
             log.debug("Page does not exist yet!")
 
@@ -826,7 +793,17 @@ class MkdocsWithConfluence(BasePlugin):
 
             return None
 
-    def wait_until(self, condition, interval=0.1, timeout=1):
+    def wait_until(self, condition):
         start = time.time()
-        while not condition and time.time() - start < timeout:
-            time.sleep(interval)
+
+        result = condition()
+
+        while not result and time.time() - start < self.config["timeout"]:
+            time.sleep(self.config["sleep_time"])
+
+            result = condition()
+
+        return result
+
+    def wait(self, interval=None):
+        time.sleep(self.config["sleep_time"])
