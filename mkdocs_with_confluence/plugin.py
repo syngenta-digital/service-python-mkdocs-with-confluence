@@ -332,7 +332,7 @@ class MkdocsWithConfluence(BasePlugin):
                 log.debug("Cleanup Markdown")
                 ###############################################
                 if self.config["clean_markdown"]:
-                    new_markdown = re.sub(r"^#(.+)\n+", "", new_markdown)
+                    new_markdown = re.sub(r"^#.+[\n\r]+", "", new_markdown)
 
                 ###############################################
                 log.debug("Converting Markdown to Confluence")
