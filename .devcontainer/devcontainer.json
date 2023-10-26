@@ -14,7 +14,7 @@
 	],
 	"postCreateCommand": [
 		"bash",
-		"/usr/local/bin/init_container.sh"
+		".devcontainer/init_container.sh"
 	],
 	"customizations": {
 		"vscode": {
@@ -24,6 +24,5 @@
 				"ms-python.black-formatter"
 			]
 		}
-	},
-	"postCreateCommand": ""
+	}
 }
