@@ -332,7 +332,9 @@ class MkdocsWithConfluence(BasePlugin):
                 log.debug("Cleaning Markdown")
                 ###############################################
                 if not self.config["disable_cleanup"]:
-                    new_markdown = re.sub(r"^#.+[\n\r]+", "", new_markdown)
+                    new_markdown = new_markdown.strip()
+                    new_markdown = re.sub(r"^#.+", "", new_markdown)
+                    new_markdown = new_markdown.strip()
 
                 ###############################################
                 log.debug("Converting Markdown to Confluence")
@@ -423,6 +425,7 @@ class MkdocsWithConfluence(BasePlugin):
                 if attachments:
                     self.page_attachments[page.title] = attachments
 
+                self.wait()
             except Exception as e:
                 log.warning(
                     f"Error with on_page_markdown for page '{page.title}': {str(e)}"
@@ -444,6 +447,8 @@ class MkdocsWithConfluence(BasePlugin):
 
                 for p in Path(site_dir).rglob(f"*{attachment_path}"):
                     self.add_or_update_attachment(title, attachment_name, p)
+
+                    self.wait()
 
     def on_page_content(self, html, page, config, files):
         return html
@@ -810,17 +815,23 @@ class MkdocsWithConfluence(BasePlugin):
 
             return None
 
-    def wait_until(self, condition):
+    def wait_until(self, condition, interval=None, timeout=None):
+        if not timeout:
+            timeout = self.config["timeout"]
+
         start = time.time()
 
         result = condition()
 
-        while not result and time.time() - start < self.config["timeout"]:
-            time.sleep(self.config["sleep_time"])
+        while not result and time.time() - start < timeout:
+            self.wait(interval)
 
             result = condition()
 
         return result
 
     def wait(self, interval=None):
-        time.sleep(self.config["sleep_time"])
+        if not interval:
+            interval = self.config["sleep_time"]
+
+        time.sleep(interval)
