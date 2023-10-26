@@ -66,7 +66,7 @@ class MkdocsWithConfluence(BasePlugin):
             config_options.Type(str, default=environ.get("JIRA_PASSWORD", None)),
         ),
         ("enabled_if_env", config_options.Type(str, default=None)),
-        ("clean_markdown", config_options.Type(bool, default=True)),
+        ("disable_cleanup", config_options.Type(bool, default=False)),
         ("verbose", config_options.Type(bool, default=False)),
         ("debug", config_options.Type(bool, default=False)),
         ("dryrun", config_options.Type(bool, default=False)),
@@ -329,9 +329,9 @@ class MkdocsWithConfluence(BasePlugin):
                     log.debug(f"WARN(({e}): Error processing mermaid. Proceed..")
 
                 ###############################################
-                log.debug("Cleanup Markdown")
+                log.debug("Cleaning Markdown")
                 ###############################################
-                if self.config["clean_markdown"]:
+                if not self.config["disable_cleanup"]:
                     new_markdown = re.sub(r"^#.+[\n\r]+", "", new_markdown)
 
                 ###############################################
