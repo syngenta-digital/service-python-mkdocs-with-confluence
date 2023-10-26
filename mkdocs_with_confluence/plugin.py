@@ -345,7 +345,7 @@ class MkdocsWithConfluence(BasePlugin):
 
                     parent_name = self.find_parent_name_of_page(page.title)
 
-                    if parent_name == parent:
+                    if parent_name == parent or page.title == parent:
                         log.debug("Parents match. Continue...")
                     else:
                         log.debug(
