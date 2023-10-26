@@ -69,7 +69,7 @@ class MkdocsWithConfluence(BasePlugin):
         ("disable_cleanup", config_options.Type(bool, default=False)),
         ("verbose", config_options.Type(bool, default=False)),
         ("debug", config_options.Type(bool, default=False)),
-        ("dryrun", config_options.Type(bool, default=True)),
+        ("dryrun", config_options.Type(bool, default=False)),
         ("sleep_time", config_options.Type(float, default=5.0)),
         ("timeout", config_options.Type(float, default=30.0)),
     )
@@ -330,7 +330,7 @@ class MkdocsWithConfluence(BasePlugin):
 
                 if not self.config["disable_cleanup"]:
                     ###############################################
-                    log.info("Cleaning Markdown")
+                    log.debug("Cleaning Markdown")
                     ###############################################
                 
                     new_markdown = new_markdown.strip()
