@@ -128,7 +128,7 @@ class MkdocsWithConfluence(BasePlugin):
             self.flen = len(pages)
             log.debug(f"Number of Files in directory tree: {self.flen}")
         except 0:
-            log.error(
+            log.warning(
                 "You have no documentation pages"
                 "in the directory tree, please add at least one!"
             )
@@ -240,7 +240,9 @@ class MkdocsWithConfluence(BasePlugin):
 
                 attachments = []
 
-                log.debug(f"Processing images in markdown")
+                ###############################################
+                log.debug("Processing images in markdown")
+                ###############################################
                 try:
                     for match in re.finditer(r'img src="file://(.*)" s', markdown):
                         log.debug(f"Found image: {match.group(1)}")
@@ -280,10 +282,12 @@ class MkdocsWithConfluence(BasePlugin):
                 except AttributeError as e:
                     log.debug(f"WARN(({e}): No images found in markdown. Proceed..")
 
-                confluence_body_swaps = []
+                confluence_body_changes = []
+                
+                ###############################################
+                log.debug("Processing mermaid code blocks")
+                ###############################################
                 try:
-                    log.debug(f"Processing mermaid code blocks")
-
                     mermaid_re = r"```mermaid\n([^`]+)\n```"
                     
                     mermaid_counter = 1
@@ -303,7 +307,7 @@ class MkdocsWithConfluence(BasePlugin):
 
                             swap_id = MERMAID_FORMAT.format(file=attachment_name)
 
-                            confluence_body_swaps.append(
+                            confluence_body_changes.append(
                                 (
                                     swap_id,
                                     self.convert_page(
@@ -324,12 +328,15 @@ class MkdocsWithConfluence(BasePlugin):
 
                 confluence_body = self.confluence_mistune(new_markdown)
 
-                for k, v in confluence_body_swaps:
+                ###############################################
+                log.debug("Modify Confluence body")
+                ###############################################
+                for k, v in confluence_body_changes:
                     confluence_body = confluence_body.replace(k, v)
-
-                log.debug(confluence_body)
-
-                log.debug("Updating page to confluence:")
+                
+                ###############################################
+                log.debug("Sending page to confluence:")
+                ###############################################
                 log.debug(f"host: {self.config['host_url']}")
                 log.debug(f"space: {self.config['space']}")
                 log.debug(f"title: {page.title}")
@@ -338,28 +345,23 @@ class MkdocsWithConfluence(BasePlugin):
 
                 page_id = self.find_page_id(page.title)
                 if page_id is not None:
-                    log.debug(
-                        f"Just one step from update of page '{page.title}'."
-                        " Checking if parent page on confluence is the same as here"
-                    )
+                    ###############################################
+                    log.debug("Updating previous page")
+                    ###############################################
 
                     parent_name = self.find_parent_name_of_page(page.title)
 
-                    if parent_name == parent or page.title == parent:
-                        log.debug("Parents match. Continue...")
-                    else:
-                        log.debug(
-                            f"ERR: Parents does not match: '{parent}' =/= '{parent_name}' Aborting..."
+                    if parent_name != parent and page.title != parent:
+                        log.warning(
+                            f"ERR: Parents does not match: '{parent}' =/= '{parent_name}'. Skipping..."
                         )
                         return markdown
 
                     self.update_page(page.title, confluence_body)
                 else:
-                    log.debug(
-                        f"Page={page.title}, parent0={parent}, "
-                        f"parent1={parent1}, main parent={main_parent}"
-                    )
-
+                    ###############################################
+                    log.debug("Creating mew page")
+                    ###############################################
                     main_parent_id = self.find_page_id(main_parent)
 
                     find_parent_id = lambda: self.find_page_id(parent)
@@ -369,10 +371,14 @@ class MkdocsWithConfluence(BasePlugin):
                     second_parent_id = self.wait_until(find_second_parent_id)
 
                     if not parent_id:
+                        ###############################################
+                        log.debug("Creating parent page(s)")
+                        ###############################################
+                    
                         if not second_parent_id:
                             main_parent_id = self.find_page_id(main_parent)
                             if not main_parent_id:
-                                log.error("Main parent unknown. Aborting!")
+                                log.warning("Main parent unknown. Aborting!")
                                 return markdown
 
                             log.debug(
@@ -408,8 +414,8 @@ class MkdocsWithConfluence(BasePlugin):
                 if attachments:
                     self.page_attachments[page.title] = attachments
 
-            except Exception:
-                log.exception(f"Error in on_page_markdown in page '{page.title}'")
+            except Exception as e:
+                log.warning(f"Error with on_page_markdown for page '{page.title}': {str(e)}")
 
                 return markdown
 
