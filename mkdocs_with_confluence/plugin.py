@@ -66,6 +66,7 @@ class MkdocsWithConfluence(BasePlugin):
             config_options.Type(str, default=environ.get("JIRA_PASSWORD", None)),
         ),
         ("enabled_if_env", config_options.Type(str, default=None)),
+        ("clean_markdown", config_options.Type(bool, default=True)),
         ("verbose", config_options.Type(bool, default=False)),
         ("debug", config_options.Type(bool, default=False)),
         ("dryrun", config_options.Type(bool, default=False)),
@@ -76,9 +77,7 @@ class MkdocsWithConfluence(BasePlugin):
     def __init__(self):
         self.enabled = True
         self.confluence_renderer = ConfluenceRenderer(use_xhtml=True)
-        self.confluence_mistune = mistune.Markdown(
-            renderer=self.confluence_renderer
-        )
+        self.confluence_mistune = mistune.Markdown(renderer=self.confluence_renderer)
         self.flen = 1
         self.session = requests.Session()
         self.page_attachments = {}
@@ -153,7 +152,10 @@ class MkdocsWithConfluence(BasePlugin):
                         f"turned ON by var {env_name}==1!"
                     )
                     self.enabled = True
-                    self.session.auth = (self.config["username"], self.config["password"])
+                    self.session.auth = (
+                        self.config["username"],
+                        self.config["password"],
+                    )
             else:
                 log.warning(
                     "Exporting Mkdocs pages to Confluence turned OFF: "
@@ -283,15 +285,15 @@ class MkdocsWithConfluence(BasePlugin):
                     log.debug(f"WARN(({e}): No images found in markdown. Proceed..")
 
                 confluence_body_changes = []
-                
+
                 ###############################################
                 log.debug("Processing mermaid code blocks")
                 ###############################################
                 try:
                     mermaid_re = r"```mermaid\n([^`]+)\n```"
-                    
+
                     mermaid_counter = 1
-                    
+
                     for match in re.finditer(mermaid_re, new_markdown):
                         mermaid_code = match.group(1)
 
@@ -321,11 +323,20 @@ class MkdocsWithConfluence(BasePlugin):
                             new_markdown = re.sub(mermaid_re, swap_id, new_markdown)
 
                             log.debug(f"Found mermaid code #{mermaid_counter}")
-                            
+
                             mermaid_counter += 1
                 except Exception as e:
                     log.debug(f"WARN(({e}): Error processing mermaid. Proceed..")
 
+                ###############################################
+                log.debug("Cleanup Markdown")
+                ###############################################
+                if self.config["clean_markdown"]:
+                    new_markdown = re.sub(r"^#(.+)\n+", "", new_markdown)
+
+                ###############################################
+                log.debug("Converting Markdown to Confluence")
+                ###############################################
                 confluence_body = self.confluence_mistune(new_markdown)
 
                 ###############################################
@@ -333,7 +344,7 @@ class MkdocsWithConfluence(BasePlugin):
                 ###############################################
                 for k, v in confluence_body_changes:
                     confluence_body = confluence_body.replace(k, v)
-                
+
                 ###############################################
                 log.debug("Sending page to confluence:")
                 ###############################################
@@ -374,7 +385,7 @@ class MkdocsWithConfluence(BasePlugin):
                         ###############################################
                         log.debug("Creating parent page(s)")
                         ###############################################
-                    
+
                         if not second_parent_id:
                             main_parent_id = self.find_page_id(main_parent)
                             if not main_parent_id:
@@ -388,8 +399,7 @@ class MkdocsWithConfluence(BasePlugin):
 
                             body = PARENT_TEMPLATE.replace("TEMPLATE", parent1)
 
-                            self.add_page(parent1, main_parent_id, body,
-                                          format="wiki")
+                            self.add_page(parent1, main_parent_id, body, format="wiki")
 
                             second_parent_id = self.wait_until(find_second_parent_id)
 
@@ -400,8 +410,7 @@ class MkdocsWithConfluence(BasePlugin):
 
                         body = PARENT_TEMPLATE.replace("TEMPLATE", parent)
 
-                        self.add_page(parent, second_parent_id, body,
-                                      format="wiki")
+                        self.add_page(parent, second_parent_id, body, format="wiki")
 
                         parent_id = self.wait_until(find_parent_id)
 
@@ -415,7 +424,9 @@ class MkdocsWithConfluence(BasePlugin):
                     self.page_attachments[page.title] = attachments
 
             except Exception as e:
-                log.warning(f"Error with on_page_markdown for page '{page.title}': {str(e)}")
+                log.warning(
+                    f"Error with on_page_markdown for page '{page.title}': {str(e)}"
+                )
 
                 return markdown
 
